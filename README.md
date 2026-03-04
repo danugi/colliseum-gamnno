@@ -52,3 +52,7 @@
 
 - Вместо полноценного inventory GUI использован clickable чат + `/colosseum join`.
 - Механика кузнечного mini-GUI для выбора эффекта Печати пока не добавлена (будет следующий шаг).
+
+
+### Toolchain note
+Если в IDE нет локальной Java 21, Gradle может автоматически скачать её через Foojay toolchain resolver.
