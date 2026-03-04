@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "colosseum_siege",
+  "version": "${version}",
+  "name": "Colosseum Siege",
+  "description": "Server-side Fabric mod for PvE Colosseum sessions.",
+  "authors": ["gpt-5.2-codex"],
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "ru.colliseum.siege.ColosseumSiegeMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "1.21.1",
+    "fabric-api": "*"
+  }
+}
