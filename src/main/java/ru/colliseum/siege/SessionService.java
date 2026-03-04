@@ -101,7 +101,7 @@ public final class SessionService {
             for (UUID pid : s.participants) {
                 ServerPlayerEntity p = server.getPlayerManager().getPlayer(pid);
                 if (p == null) continue;
-                if (!s.arena.isInside(world, p.getPos())) p.teleport(world, s.arena.center.x, s.arena.center.y, s.arena.center.z, Set.of(), p.getYaw(), p.getPitch(), true);
+                if (!s.arena.isInside(world, p.getPos())) p.teleport(world, s.arena.center.x, s.arena.center.y, s.arena.center.z, p.getYaw(), p.getPitch());
             }
 
             s.currentWaveMobs.removeIf(id -> world.getEntity(id) == null || !world.getEntity(id).isAlive());
@@ -128,7 +128,7 @@ public final class SessionService {
         for (UUID id : s.participants) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p == null) continue;
-            p.teleport(world, s.arena.entry.x, s.arena.entry.y, s.arena.entry.z, Set.of(), p.getYaw(), p.getPitch(), true);
+            p.teleport(world, s.arena.entry.x, s.arena.entry.y, s.arena.entry.z, p.getYaw(), p.getPitch());
             if (s.mode == Mode.ELITE) {
                 s.eliteSnapshots.put(id, EliteInventorySnapshot.capture(p));
                 giveEliteKit(p);
@@ -187,9 +187,9 @@ public final class SessionService {
             dmgMul *= 1.15;
         }
         double hp = mob.getMaxHealth() * hpMul;
-        mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.MAX_HEALTH).setBaseValue(hp);
+        mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(hp);
         mob.setHealth((float) hp);
-        var attack = mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.ATTACK_DAMAGE);
+        var attack = mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.GENERIC_ATTACK_DAMAGE);
         if (attack != null) attack.setBaseValue(attack.getBaseValue() * dmgMul);
     }
 
@@ -224,7 +224,7 @@ public final class SessionService {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p == null || world == null) continue;
             if (s.mode == Mode.ELITE && s.eliteSnapshots.containsKey(id)) s.eliteSnapshots.get(id).restore(p);
-            p.teleport(world, s.arena.exit.x, s.arena.exit.y, s.arena.exit.z, Set.of(), p.getYaw(), p.getPitch(), true);
+            p.teleport(world, s.arena.exit.x, s.arena.exit.y, s.arena.exit.z, p.getYaw(), p.getPitch());
             if (win) p.sendMessage(Text.literal("§a" + reason), false);
             else p.sendMessage(Text.literal("§c" + reason + ". Наград нет."), false);
         }
