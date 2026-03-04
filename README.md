@@ -1,8 +1,10 @@
-# COLOSSEUM: SIEGE (Fabric server-side)
+# COLOSSEUM: SIEGE (Fabric client+server)
 
-Версия таргета: **Fabric server-side 1.21.1** (это реально существующая и собираемая версия Java Edition).
+Версия таргета: **Fabric 1.21.1 (client + server)**.
 
 Требуемая Java для сборки/рантайма: **Java 21**.
+
+Можно тестить и на выделенном сервере, и в одиночном мире (integrated server).
 
 ## Что реализовано по плану
 

@@ -3,9 +3,9 @@
   "id": "colosseum_siege",
   "version": "${version}",
   "name": "Colosseum Siege",
-  "description": "Server-side Fabric mod for PvE Colosseum sessions.",
+  "description": "Fabric mod for PvE Colosseum sessions (client + server support).",
   "authors": ["gpt-5.2-codex"],
-  "environment": "server",
+  "environment": "*",
   "entrypoints": {
     "main": [
       "ru.colliseum.siege.ColosseumSiegeMod"
