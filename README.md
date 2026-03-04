@@ -1,6 +1,6 @@
 # COLOSSEUM: SIEGE (Fabric client+server)
 
-Версия таргета: **Fabric 1.21.1 (client + server)**.
+Версия таргета: **Fabric 1.21.11 (client + server)**.
 
 Требуемая Java для сборки/рантайма: **Java 21**.
 
@@ -48,7 +48,18 @@
 - `colosseum.use`
 - `colosseum.admin`
 
-Реализовано через `fabric-permissions-api` (LuckPerms/Fabric permission adapters).
+В текущей сборке используется упрощённая проверка внутри `ModPermissions` (без внешнего permission API).
+
+
+## Сборка
+
+Для корректной работы Gradle/Loom запускай сборку под **JDK 21** (на JDK 25 возможна ошибка `Unsupported class file major version 69`).
+
+```bash
+export JAVA_HOME=/path/to/jdk-21
+export PATH="$JAVA_HOME/bin:$PATH"
+gradle classes
+```
 
 ## Ограничения текущей итерации
 

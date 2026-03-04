@@ -62,7 +62,7 @@ public final class RewardService {
 
     public static boolean hasSeal(ItemStack stack) {
         NbtCompound nbt = stack.getOrDefault(DataComponentTypes.CUSTOM_DATA, NbtComponent.DEFAULT).copyNbt();
-        return nbt.getBoolean("colosseum_seal_applied");
+        return nbt.getBoolean("colosseum_seal_applied").orElse(false);
     }
 
     public static ItemStack applySealTo(ItemStack target, String effectId) {

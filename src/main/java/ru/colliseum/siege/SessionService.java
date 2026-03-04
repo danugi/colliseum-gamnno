@@ -101,7 +101,7 @@ public final class SessionService {
             for (UUID pid : s.participants) {
                 ServerPlayerEntity p = server.getPlayerManager().getPlayer(pid);
                 if (p == null) continue;
-                if (!s.arena.isInside(world, p.getPos())) p.teleport(world, s.arena.center.x, s.arena.center.y, s.arena.center.z, p.getYaw(), p.getPitch());
+                if (!s.arena.isInside(world, new Vec3d(p.getX(), p.getY(), p.getZ()))) p.teleport(world, s.arena.center.x, s.arena.center.y, s.arena.center.z, java.util.Set.of(), p.getYaw(), p.getPitch(), true);
             }
 
             s.currentWaveMobs.removeIf(id -> world.getEntity(id) == null || !world.getEntity(id).isAlive());
@@ -128,7 +128,7 @@ public final class SessionService {
         for (UUID id : s.participants) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p == null) continue;
-            p.teleport(world, s.arena.entry.x, s.arena.entry.y, s.arena.entry.z, p.getYaw(), p.getPitch());
+            p.teleport(world, s.arena.entry.x, s.arena.entry.y, s.arena.entry.z, java.util.Set.of(), p.getYaw(), p.getPitch(), true);
             if (s.mode == Mode.ELITE) {
                 s.eliteSnapshots.put(id, EliteInventorySnapshot.capture(p));
                 giveEliteKit(p);
@@ -187,9 +187,9 @@ public final class SessionService {
             dmgMul *= 1.15;
         }
         double hp = mob.getMaxHealth() * hpMul;
-        mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(hp);
+        mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.MAX_HEALTH).setBaseValue(hp);
         mob.setHealth((float) hp);
-        var attack = mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.GENERIC_ATTACK_DAMAGE);
+        var attack = mob.getAttributeInstance(net.minecraft.entity.attribute.EntityAttributes.ATTACK_DAMAGE);
         if (attack != null) attack.setBaseValue(attack.getBaseValue() * dmgMul);
     }
 
@@ -224,7 +224,7 @@ public final class SessionService {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p == null || world == null) continue;
             if (s.mode == Mode.ELITE && s.eliteSnapshots.containsKey(id)) s.eliteSnapshots.get(id).restore(p);
-            p.teleport(world, s.arena.exit.x, s.arena.exit.y, s.arena.exit.z, p.getYaw(), p.getPitch());
+            p.teleport(world, s.arena.exit.x, s.arena.exit.y, s.arena.exit.z, java.util.Set.of(), p.getYaw(), p.getPitch(), true);
             if (win) p.sendMessage(Text.literal("§a" + reason), false);
             else p.sendMessage(Text.literal("§c" + reason + ". Наград нет."), false);
         }
@@ -236,10 +236,10 @@ public final class SessionService {
         p.getInventory().insertStack(new ItemStack(Items.BOW));
         p.getInventory().insertStack(new ItemStack(Items.ARROW, 64));
         p.getInventory().insertStack(new ItemStack(Items.GOLDEN_CARROT, 16));
-        p.getInventory().armor.set(3, new ItemStack(Items.NETHERITE_HELMET));
-        p.getInventory().armor.set(2, new ItemStack(Items.NETHERITE_CHESTPLATE));
-        p.getInventory().armor.set(1, new ItemStack(Items.NETHERITE_LEGGINGS));
-        p.getInventory().armor.set(0, new ItemStack(Items.NETHERITE_BOOTS));
+        p.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
+        p.equipStack(EquipmentSlot.CHEST, new ItemStack(Items.NETHERITE_CHESTPLATE));
+        p.equipStack(EquipmentSlot.LEGS, new ItemStack(Items.NETHERITE_LEGGINGS));
+        p.equipStack(EquipmentSlot.FEET, new ItemStack(Items.NETHERITE_BOOTS));
     }
 
     private void broadcast(MinecraftServer server, Set<UUID> ids, String msg) {

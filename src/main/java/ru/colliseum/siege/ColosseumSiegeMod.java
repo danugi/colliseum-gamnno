@@ -3,10 +3,8 @@ package ru.colliseum.siege;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import me.lucko.fabric.api.permissions.v0.Options;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.fabricmc.fabric.api.entity.event.v1.ServerEntityCombatEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
@@ -18,12 +16,8 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.math.Vec3d;
 
 import java.io.IOException;
@@ -83,19 +77,12 @@ public final class ColosseumSiegeMod implements ModInitializer {
             if (!(player instanceof ServerPlayerEntity sp)) return ActionResult.PASS;
             ItemStack weapon = sp.getMainHandStack();
             if (RewardService.hasSeal(weapon) && entity instanceof net.minecraft.entity.mob.MobEntity) {
-                entity.damage(world.getDamageSources().playerAttack(player), 1.0f);
+                if (world instanceof ServerWorld sw) entity.damage(sw, world.getDamageSources().playerAttack(player), 1.0f);
             }
             return ActionResult.PASS;
         });
 
-        ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY.register((world, entity, killedEntity) -> {
-            if (!(entity instanceof ServerPlayerEntity player)) return;
-            ItemStack armor = player.getInventory().armor.get(2);
-            if (!RewardService.hasSeal(armor)) return;
-            if (killedEntity instanceof net.minecraft.entity.mob.MobEntity) {
-                player.addVelocity(0, 0.2, 0);
-            }
-        });
+
     }
 
     private void registerCommands() {
@@ -144,13 +131,10 @@ public final class ColosseumSiegeMod implements ModInitializer {
         }
         Difficulty d = parseDifficulty(difficultyRaw);
         Mode m = parseMode(modeRaw);
-        int recruit = Integer.parseInt(Options.get(ctx.getSource(), "colosseum.recruitSeconds").orElse("45"));
+        int recruit = 45;
         QueueLobby q = sessionService.openQueue(arenaName, d, m, p.getUuid(), recruit);
         p.sendMessage(Text.literal("§aНабор открыт на " + recruit + " сек. " + d + " / " + m), false);
-        MutableText join = Text.literal("[Присоединиться]").setStyle(Style.EMPTY.withColor(Formatting.GREEN)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/colosseum join " + arenaName)));
-        MutableText decline = Text.literal(" [Отказаться]").formatted(Formatting.RED);
-        ctx.getSource().getServer().getPlayerManager().broadcast(Text.literal("§eКолизей: набор на арену " + arenaName + " ").append(join).append(decline), false);
+        ctx.getSource().getServer().getPlayerManager().broadcast(Text.literal("§eКолизей: набор на арену " + arenaName + " (/colosseum join " + arenaName + ")"), false);
         return 1;
     }
 
@@ -190,7 +174,7 @@ public final class ColosseumSiegeMod implements ModInitializer {
         ServerPlayerEntity p = ctx.getSource().getPlayer(); if (p == null) return 0;
         String name = StringArgumentType.getString(ctx, "arena").toLowerCase();
         ArenaData a = arenaRepo.get(name);
-        if (a == null) { a = new ArenaData(); a.name = name; a.world = p.getWorld().getRegistryKey().getValue().toString(); arenaRepo.put(name, a); }
+        if (a == null) { a = new ArenaData(); a.name = name; a.world = p.getEntityWorld().getRegistryKey().getValue().toString(); arenaRepo.put(name, a); }
         editingArena.put(p.getUuid(), a);
         p.sendMessage(Text.literal("§aРедактирование арены: " + name), false);
         return 1;
@@ -200,7 +184,7 @@ public final class ColosseumSiegeMod implements ModInitializer {
     private int addSpawn(CommandContext<ServerCommandSource> ctx) {
         ServerPlayerEntity p = ctx.getSource().getPlayer(); ArenaData a = editingArena.get(p.getUuid());
         if (a == null) return msg(p, "Сначала /colosseum admin edit <arena>");
-        a.spawns.add(p.getPos()); return msg(p, "§aSpawn добавлен.");
+        a.spawns.add(new Vec3d(p.getX(), p.getY(), p.getZ())); return msg(p, "§aSpawn добавлен.");
     }
     private int setEntry(CommandContext<ServerCommandSource> ctx) { return setPos(ctx, "entry"); }
     private int setExit(CommandContext<ServerCommandSource> ctx) { return setPos(ctx, "exit"); }
@@ -209,14 +193,14 @@ public final class ColosseumSiegeMod implements ModInitializer {
     private int setPos(CommandContext<ServerCommandSource> ctx, String key) {
         ServerPlayerEntity p = ctx.getSource().getPlayer(); ArenaData a = editingArena.get(p.getUuid());
         if (a == null) return msg(p, "Сначала /colosseum admin edit <arena>");
-        Vec3d pos = p.getPos();
+        Vec3d pos = new Vec3d(p.getX(), p.getY(), p.getZ());
         switch (key) {
             case "center" -> a.center = pos;
             case "entry" -> a.entry = pos;
             case "exit" -> a.exit = pos;
             case "lobby" -> a.lobby = pos;
         }
-        a.world = p.getWorld().getRegistryKey().getValue().toString();
+        a.world = p.getEntityWorld().getRegistryKey().getValue().toString();
         return msg(p, "§aПозиция " + key + " сохранена.");
     }
 
