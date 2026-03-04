@@ -55,4 +55,4 @@
 
 
 ### Toolchain note
-Если в IDE нет локальной Java 21, Gradle может автоматически скачать её через Foojay toolchain resolver.
+Используй локальную установленную **Java 21** (в IDE укажи Gradle JVM = JDK 21).
