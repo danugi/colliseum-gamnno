@@ -1,6 +1,6 @@
 # COLOSSEUM: SIEGE (Fabric server-side)
 
-Версия таргета: **Fabric server-side 1.21.11** (в проекте сейчас 1.21.1 yarn, совместимость на уровне 1.21.x).
+Версия таргета: **Fabric server-side 1.21.11** (строго зафиксирована в build/config).
 
 ## Что реализовано по плану
 
