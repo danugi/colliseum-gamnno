@@ -10,6 +10,9 @@ import net.minecraft.item.Items;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.entity.boss.BossBar;
+import net.minecraft.entity.boss.ServerBossBar;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec3d;
 
@@ -29,6 +32,10 @@ public final class SessionService {
         public boolean started;
         public boolean finished;
         public final Set<UUID> currentWaveMobs = new HashSet<>();
+        public int currentWaveTotalMobs = 0;
+        public final Map<UUID, Long> boundaryPushCooldownMs = new HashMap<>();
+        public ServerBossBar waveBossBar;
+        public int boundaryVisualTick = 0;
 
         ActiveSession(ArenaData arena, Difficulty difficulty, Mode mode, Set<UUID> participants) {
             this.arena = arena;
@@ -101,7 +108,9 @@ public final class SessionService {
             for (UUID pid : s.participants) {
                 ServerPlayerEntity p = server.getPlayerManager().getPlayer(pid);
                 if (p == null) continue;
-                if (!s.arena.isInside(world, new Vec3d(p.getX(), p.getY(), p.getZ()))) p.teleport(world, s.arena.center.x, s.arena.center.y, s.arena.center.z, java.util.Set.of(), p.getYaw(), p.getPitch(), true);
+                if (!s.arena.isInside(world, new Vec3d(p.getX(), p.getY(), p.getZ()))) {
+                    pushPlayerBackToArena(s, p);
+                }
             }
 
             s.currentWaveMobs.removeIf(id -> world.getEntity(id) == null || !world.getEntity(id).isAlive());
@@ -118,6 +127,9 @@ public final class SessionService {
                 var ent = world.getEntity(id);
                 if (ent != null) ent.setOnFire(false);
             }
+
+            updateWaveBossBar(s);
+            showBoundaryVisual(world, s);
         }
     }
 
@@ -125,10 +137,13 @@ public final class SessionService {
         ServerWorld world = server.getWorld(s.arena.worldKey());
         if (world == null) return;
         s.started = true;
+        s.waveBossBar = new ServerBossBar(Text.literal("§eВолна 0/" + s.difficulty.waves()), BossBar.Color.YELLOW, BossBar.Style.PROGRESS);
+        s.waveBossBar.setPercent(0.0f);
         for (UUID id : s.participants) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p == null) continue;
             p.teleport(world, s.arena.entry.x, s.arena.entry.y, s.arena.entry.z, java.util.Set.of(), p.getYaw(), p.getPitch(), true);
+            s.waveBossBar.addPlayer(p);
             if (s.mode == Mode.ELITE) {
                 s.eliteSnapshots.put(id, EliteInventorySnapshot.capture(p));
                 giveEliteKit(p);
@@ -141,15 +156,23 @@ public final class SessionService {
     private void nextWave(ServerWorld world, ActiveSession s) {
         s.wave++;
         if (s.wave > s.difficulty.waves()) return;
+        int totalWaves = s.difficulty.waves();
+        broadcast(world.getServer(), s.participants, "§6Волна " + s.wave + "/" + totalWaves);
+
         if (s.wave == s.difficulty.waves()) {
             LivingEntity boss = spawnBoss(world, s);
             s.bossId = boss.getUuid();
+            s.currentWaveTotalMobs = 1;
             s.currentWaveMobs.add(boss.getUuid());
+            if (s.waveBossBar != null) s.waveBossBar.setColor(BossBar.Color.RED);
+            updateWaveBossBar(s);
+            showBoundaryVisual(world, s);
             return;
         }
 
         int players = s.participants.size();
         int count = Math.max(3, (int)Math.round((4 + s.wave * 0.35) * (1 + 0.35 * (players - 1))));
+        s.currentWaveTotalMobs = count;
         for (int i = 0; i < count; i++) {
             Vec3d pos = s.arena.spawns.get(i % s.arena.spawns.size());
             ZombieEntity z = new ZombieEntity(EntityType.ZOMBIE, world);
@@ -160,6 +183,8 @@ public final class SessionService {
             world.spawnEntity(z);
             s.currentWaveMobs.add(z.getUuid());
         }
+        if (s.waveBossBar != null) s.waveBossBar.setColor(BossBar.Color.YELLOW);
+        updateWaveBossBar(s);
     }
 
     private LivingEntity spawnBoss(ServerWorld world, ActiveSession s) {
@@ -203,6 +228,7 @@ public final class SessionService {
     public void finishDefeat(MinecraftServer server, ActiveSession s, String reason) {
         if (s.finished) return;
         s.finished = true;
+        clearWaveBossBar(s);
         for (UUID id : s.participants) cooldownService.applyLoseCooldown(id, s.difficulty);
         restorePlayers(server, s, false, reason);
     }
@@ -210,6 +236,7 @@ public final class SessionService {
     public void finishVictory(MinecraftServer server, ActiveSession s) {
         if (s.finished) return;
         s.finished = true;
+        clearWaveBossBar(s);
         for (UUID id : s.participants) cooldownService.applyWinCooldown(id, s.difficulty);
         for (UUID id : s.eligible) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
@@ -246,6 +273,63 @@ public final class SessionService {
         for (UUID id : ids) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p != null) p.sendMessage(Text.literal(msg), false);
+        }
+    }
+
+    private void pushPlayerBackToArena(ActiveSession s, ServerPlayerEntity player) {
+        Vec3d center = s.arena.center;
+        Vec3d fromPlayerToCenter = new Vec3d(center.x - player.getX(), 0, center.z - player.getZ());
+        if (fromPlayerToCenter.lengthSquared() < 0.0001) return;
+
+        Vec3d knockback = fromPlayerToCenter.normalize().multiply(1.15).add(0, 0.25, 0);
+        player.setVelocity(knockback.x, knockback.y, knockback.z);
+
+        long now = System.currentTimeMillis();
+        long lastWarn = s.boundaryPushCooldownMs.getOrDefault(player.getUuid(), 0L);
+        if (now - lastWarn > 1200) {
+            player.sendMessage(Text.literal("§cНельзя выходить за границы арены!"), true);
+            s.boundaryPushCooldownMs.put(player.getUuid(), now);
+        }
+    }
+
+
+    private void showBoundaryVisual(ServerWorld world, ActiveSession s) {
+        s.boundaryVisualTick++;
+        if (s.boundaryVisualTick % 10 != 0) return;
+
+        float y = (float) (s.arena.center.y + 1.0);
+        float radius = (float) s.arena.radius;
+        if (radius <= 0.5f) return;
+
+        int points = Math.max(48, (int) (radius * 6));
+        for (int i = 0; i < points; i++) {
+            double angle = (Math.PI * 2.0 * i) / points;
+            double x = s.arena.center.x + Math.cos(angle) * radius;
+            double z = s.arena.center.z + Math.sin(angle) * radius;
+            world.spawnParticles(ParticleTypes.FLAME, x, y, z, 1, 0.03, 0.1, 0.03, 0.0);
+        }
+    }
+
+    private void updateWaveBossBar(ActiveSession s) {
+        if (s.waveBossBar == null) return;
+        int totalWaves = s.difficulty.waves();
+        s.waveBossBar.setName(Text.literal("§eВолна " + s.wave + "/" + totalWaves));
+
+        if (s.currentWaveTotalMobs <= 0) {
+            s.waveBossBar.setPercent(0.0f);
+            return;
+        }
+
+        float aliveRatio = Math.max(0.0f, Math.min(1.0f, (float) s.currentWaveMobs.size() / (float) s.currentWaveTotalMobs));
+        float completedCurrentWave = 1.0f - aliveRatio;
+        float progress = ((s.wave - 1) + completedCurrentWave) / (float) totalWaves;
+        s.waveBossBar.setPercent(Math.max(0.0f, Math.min(1.0f, progress)));
+    }
+
+    private void clearWaveBossBar(ActiveSession s) {
+        if (s.waveBossBar != null) {
+            s.waveBossBar.clearPlayers();
+            s.waveBossBar = null;
         }
     }
 }
