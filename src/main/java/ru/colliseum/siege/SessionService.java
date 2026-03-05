@@ -180,6 +180,7 @@ public final class SessionService {
             int babyPct = (s.difficulty == Difficulty.HARD || s.difficulty == Difficulty.HARDCORE) ? 40 : 30;
             z.setBaby(world.random.nextInt(100) < babyPct);
             applyScaling(z, players, s.difficulty);
+            z.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
             world.spawnEntity(z);
             s.currentWaveMobs.add(z.getUuid());
         }
@@ -195,6 +196,7 @@ public final class SessionService {
         boss.setCustomNameVisible(true);
         applyScaling(boss, s.participants.size() + 2, s.difficulty);
         boss.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_AXE));
+        boss.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
         world.spawnEntity(boss);
         broadcast(world.getServer(), s.participants, "§cФинальный босс: " + s.difficulty.finalBossName());
         return boss;
@@ -278,11 +280,25 @@ public final class SessionService {
 
     private void pushPlayerBackToArena(ActiveSession s, ServerPlayerEntity player) {
         Vec3d center = s.arena.center;
-        Vec3d fromPlayerToCenter = new Vec3d(center.x - player.getX(), 0, center.z - player.getZ());
-        if (fromPlayerToCenter.lengthSquared() < 0.0001) return;
+        double dx = player.getX() - center.x;
+        double dz = player.getZ() - center.z;
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        if (distance < 0.0001) return;
 
-        Vec3d knockback = fromPlayerToCenter.normalize().multiply(1.15).add(0, 0.25, 0);
-        player.setVelocity(knockback.x, knockback.y, knockback.z);
+        double safeRadius = Math.max(1.0, s.arena.radius - 0.6);
+        if (distance > safeRadius) {
+            double nx = dx / distance;
+            double nz = dz / distance;
+            double clampedX = center.x + nx * safeRadius;
+            double clampedZ = center.z + nz * safeRadius;
+            player.teleport((ServerWorld) player.getEntityWorld(), clampedX, player.getY(), clampedZ, java.util.Set.of(), player.getYaw(), player.getPitch(), true);
+        }
+
+        Vec3d fromPlayerToCenter = new Vec3d(center.x - player.getX(), 0, center.z - player.getZ());
+        if (fromPlayerToCenter.lengthSquared() > 0.0001) {
+            Vec3d knockback = fromPlayerToCenter.normalize().multiply(1.35).add(0, 0.30, 0);
+            player.setVelocity(knockback.x, knockback.y, knockback.z);
+        }
 
         long now = System.currentTimeMillis();
         long lastWarn = s.boundaryPushCooldownMs.getOrDefault(player.getUuid(), 0L);
