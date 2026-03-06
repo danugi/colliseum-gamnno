@@ -117,6 +117,9 @@ public final class ColosseumSiegeMod implements ModInitializer {
                                 .then(CommandManager.argument("name", StringArgumentType.word()).executes(this::saveArena)))
                         .then(CommandManager.literal("win").requires(ModPermissions::hasAdmin).executes(this::win))
                         .then(CommandManager.literal("lose").requires(ModPermissions::hasAdmin).executes(this::lose))
+                        .then(CommandManager.literal("clearcd").requires(ModPermissions::hasAdmin)
+                                .executes(this::clearCooldownSelf)
+                                .then(CommandManager.argument("player", StringArgumentType.word()).executes(this::clearCooldownForPlayer)))
         ));
     }
 
@@ -240,6 +243,28 @@ public final class ColosseumSiegeMod implements ModInitializer {
         var s = sessionService.getByPlayer(p.getUuid());
         if (s == null) return msg(p, "§cВы не в сессии");
         sessionService.finishDefeat(ctx.getSource().getServer(), s, "Сессия завершена админом"); return 1;
+    }
+
+
+    private int clearCooldownSelf(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity p = ctx.getSource().getPlayer();
+        if (p == null) return 0;
+        cooldownService.clearCooldown(p.getUuid());
+        p.sendMessage(Text.literal("§aКД очищен."), false);
+        return 1;
+    }
+
+    private int clearCooldownForPlayer(CommandContext<ServerCommandSource> ctx) {
+        String playerName = StringArgumentType.getString(ctx, "player");
+        var target = ctx.getSource().getServer().getPlayerManager().getPlayer(playerName);
+        if (target == null) {
+            ctx.getSource().sendFeedback(() -> Text.literal("§cИгрок не найден/не в сети: " + playerName), false);
+            return 1;
+        }
+        cooldownService.clearCooldown(target.getUuid());
+        target.sendMessage(Text.literal("§aВаш КД был снят администратором."), false);
+        ctx.getSource().sendFeedback(() -> Text.literal("§aКД очищен для: " + target.getName().getString()), false);
+        return 1;
     }
 
     private int msg(ServerPlayerEntity p, String m) { p.sendMessage(Text.literal(m), false); return 1; }

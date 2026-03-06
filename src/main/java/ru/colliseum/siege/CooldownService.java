@@ -43,6 +43,10 @@ public final class CooldownService {
         apply(playerId, loseCooldowns.getOrDefault(difficulty, Duration.ZERO));
     }
 
+    public void clearCooldown(UUID playerId) {
+        cooldownByPlayer.remove(playerId);
+    }
+
     private void apply(UUID playerId, Duration duration) {
         if (duration.isZero() || duration.isNegative()) {
             cooldownByPlayer.remove(playerId);
