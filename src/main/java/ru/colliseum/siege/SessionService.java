@@ -4,6 +4,10 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.HuskEntity;
+import net.minecraft.entity.mob.SkeletonEntity;
+import net.minecraft.entity.mob.SpiderEntity;
+import net.minecraft.entity.mob.StrayEntity;
 import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -13,6 +17,8 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec3d;
 
@@ -113,7 +119,10 @@ public final class SessionService {
                 }
             }
 
-            s.currentWaveMobs.removeIf(id -> world.getEntity(id) == null || !world.getEntity(id).isAlive());
+            s.currentWaveMobs.removeIf(id -> {
+                var ent = world.getEntity(id);
+                return ent == null || !ent.isAlive();
+            });
             if (s.bossId != null) {
                 var boss = world.getEntity(s.bossId);
                 if (boss == null || !boss.isAlive()) {
@@ -125,7 +134,7 @@ public final class SessionService {
 
             for (UUID id : s.currentWaveMobs) {
                 var ent = world.getEntity(id);
-                if (ent != null) ent.setOnFire(false);
+                if (ent != null) { ent.setOnFire(false); ent.setFireTicks(0); }
             }
 
             updateWaveBossBar(s);
@@ -171,18 +180,24 @@ public final class SessionService {
         }
 
         int players = s.participants.size();
-        int count = Math.max(3, (int)Math.round((4 + s.wave * 0.35) * (1 + 0.35 * (players - 1))));
+        int count = Math.max(4, (int)Math.round((5 + s.wave * 0.55) * (1 + 0.40 * (players - 1))));
         s.currentWaveTotalMobs = count;
-        for (int i = 0; i < count; i++) {
-            Vec3d pos = s.arena.spawns.get(i % s.arena.spawns.size());
-            ZombieEntity z = new ZombieEntity(EntityType.ZOMBIE, world);
-            z.refreshPositionAndAngles(pos.x, pos.y, pos.z, world.random.nextFloat() * 360f, 0);
-            int babyPct = (s.difficulty == Difficulty.HARD || s.difficulty == Difficulty.HARDCORE) ? 40 : 30;
-            z.setBaby(world.random.nextInt(100) < babyPct);
-            applyScaling(z, players, s.difficulty);
-            z.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
-            world.spawnEntity(z);
-            s.currentWaveMobs.add(z.getUuid());
+
+        int spawned = 0;
+        while (spawned < count) {
+            Vec3d basePos = s.arena.spawns.get(spawned % s.arena.spawns.size());
+            int burst = Math.min(1 + world.random.nextInt(2), count - spawned);
+            for (int j = 0; j < burst; j++) {
+                LivingEntity mob = createWaveMob(world, s);
+                double ox = (world.random.nextDouble() - 0.5) * 1.8;
+                double oz = (world.random.nextDouble() - 0.5) * 1.8;
+                mob.refreshPositionAndAngles(basePos.x + ox, basePos.y, basePos.z + oz, world.random.nextFloat() * 360f, 0);
+                applyScaling(mob, players, s.difficulty);
+                applySunProtection(mob);
+                world.spawnEntity(mob);
+                s.currentWaveMobs.add(mob.getUuid());
+                spawned++;
+            }
         }
         if (s.waveBossBar != null) s.waveBossBar.setColor(BossBar.Color.YELLOW);
         updateWaveBossBar(s);
@@ -196,10 +211,41 @@ public final class SessionService {
         boss.setCustomNameVisible(true);
         applyScaling(boss, s.participants.size() + 2, s.difficulty);
         boss.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_AXE));
-        boss.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.NETHERITE_HELMET));
+        applySunProtection(boss);
         world.spawnEntity(boss);
         broadcast(world.getServer(), s.participants, "§cФинальный босс: " + s.difficulty.finalBossName());
         return boss;
+    }
+
+
+    private LivingEntity createWaveMob(ServerWorld world, ActiveSession s) {
+        int roll = world.random.nextInt(100);
+        return switch (s.difficulty) {
+            case EASY -> roll < 70 ? new ZombieEntity(EntityType.ZOMBIE, world) : new SpiderEntity(EntityType.SPIDER, world);
+            case MEDIUM -> {
+                if (roll < 45) yield new ZombieEntity(EntityType.ZOMBIE, world);
+                if (roll < 75) yield new SkeletonEntity(EntityType.SKELETON, world);
+                yield new SpiderEntity(EntityType.SPIDER, world);
+            }
+            case HARD -> {
+                if (roll < 35) yield new ZombieEntity(EntityType.ZOMBIE, world);
+                if (roll < 60) yield new HuskEntity(EntityType.HUSK, world);
+                if (roll < 82) yield new SkeletonEntity(EntityType.SKELETON, world);
+                yield new SpiderEntity(EntityType.SPIDER, world);
+            }
+            case HARDCORE -> {
+                if (roll < 28) yield new HuskEntity(EntityType.HUSK, world);
+                if (roll < 52) yield new SkeletonEntity(EntityType.SKELETON, world);
+                if (roll < 74) yield new StrayEntity(EntityType.STRAY, world);
+                yield new SpiderEntity(EntityType.SPIDER, world);
+            }
+        };
+    }
+
+    private void applySunProtection(LivingEntity mob) {
+        mob.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 20 * 60 * 30, 0, false, false));
+        mob.setOnFire(false);
+        mob.setFireTicks(0);
     }
 
     private void applyScaling(HostileEntity mob, int players, Difficulty d) {
@@ -311,18 +357,18 @@ public final class SessionService {
 
     private void showBoundaryVisual(ServerWorld world, ActiveSession s) {
         s.boundaryVisualTick++;
-        if (s.boundaryVisualTick % 10 != 0) return;
+        if (s.boundaryVisualTick % 20 != 0) return;
 
         float y = (float) (s.arena.center.y + 1.0);
         float radius = (float) s.arena.radius;
         if (radius <= 0.5f) return;
 
-        int points = Math.max(48, (int) (radius * 6));
+        int points = Math.max(24, Math.min(72, (int) (radius * 3.2)));
         for (int i = 0; i < points; i++) {
             double angle = (Math.PI * 2.0 * i) / points;
             double x = s.arena.center.x + Math.cos(angle) * radius;
             double z = s.arena.center.z + Math.sin(angle) * radius;
-            world.spawnParticles(ParticleTypes.FLAME, x, y, z, 1, 0.03, 0.1, 0.03, 0.0);
+            world.spawnParticles(ParticleTypes.END_ROD, x, y, z, 1, 0.0, 0.02, 0.0, 0.0);
         }
     }
 
