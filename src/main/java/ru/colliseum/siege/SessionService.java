@@ -194,6 +194,7 @@ public final class SessionService {
                 mob.refreshPositionAndAngles(basePos.x + ox, basePos.y, basePos.z + oz, world.random.nextFloat() * 360f, 0);
                 applyScaling(mob, players, s.difficulty);
                 applySunProtection(mob);
+                configureMobBehavior(mob, world, s);
                 world.spawnEntity(mob);
                 s.currentWaveMobs.add(mob.getUuid());
                 spawned++;
@@ -240,6 +241,32 @@ public final class SessionService {
                 yield new SpiderEntity(EntityType.SPIDER, world);
             }
         };
+    }
+
+
+    private void configureMobBehavior(LivingEntity mob, ServerWorld world, ActiveSession s) {
+        if (mob instanceof SkeletonEntity skeleton) {
+            skeleton.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
+            skeleton.setCanPickUpLoot(false);
+        }
+        if (mob instanceof StrayEntity stray) {
+            stray.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.BOW));
+            stray.setCanPickUpLoot(false);
+        }
+        if (mob instanceof SpiderEntity spider) {
+            ServerPlayerEntity target = pickAggroTarget(world, s);
+            if (target != null) spider.setTarget(target);
+        }
+    }
+
+    private ServerPlayerEntity pickAggroTarget(ServerWorld world, ActiveSession s) {
+        List<ServerPlayerEntity> online = new ArrayList<>();
+        for (UUID id : s.participants) {
+            ServerPlayerEntity p = world.getServer().getPlayerManager().getPlayer(id);
+            if (p != null && p.isAlive() && p.getEntityWorld() == world) online.add(p);
+        }
+        if (online.isEmpty()) return null;
+        return online.get(world.random.nextInt(online.size()));
     }
 
     private void applySunProtection(LivingEntity mob) {
