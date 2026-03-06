@@ -5,6 +5,7 @@ import net.minecraft.component.type.NbtComponent;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 
@@ -15,17 +16,17 @@ import java.util.Random;
 public final class RewardService {
     private final Random random = new Random();
 
-    public void giveVictoryRewards(ServerPlayerEntity player, Difficulty d) {
+    public void giveVictoryRewards(ServerPlayerEntity player, Difficulty d, MinecraftServer server) {
         List<ItemStack> rewards = new ArrayList<>();
         switch (d) {
-            case EASY -> { rewards.add(new ItemStack(Items.GOLD_INGOT, roll(1, 2))); if (chance(10)) rewards.add(book("Книга IV")); }
+            case EASY -> { rewards.add(new ItemStack(Items.GOLD_INGOT, roll(1, 2))); if (chance(10)) rewards.add(RewardBookFactory.create(server, RewardBook.BOOK_IV)); }
             case MEDIUM -> {
                 rewards.add(new ItemStack(Items.DIAMOND, roll(1, 2)));
                 rewards.add(new ItemStack(Items.GOLD_INGOT, roll(6, 10)));
                 rewards.add(new ItemStack(Items.GOLDEN_CARROT, roll(12, 16)));
                 if (chance(40)) rewards.add(new ItemStack(Items.ANCIENT_DEBRIS, 1));
                 if (chance(20)) rewards.add(new ItemStack(Items.GOLDEN_APPLE, 1));
-                if (chance(25)) rewards.add(book("Книга IV"));
+                if (chance(25)) rewards.add(RewardBookFactory.create(server, RewardBook.BOOK_IV));
             }
             case HARD -> {
                 rewards.add(new ItemStack(Items.DIAMOND, roll(2, 4)));
@@ -34,10 +35,10 @@ public final class RewardService {
                 rewards.add(new ItemStack(Items.ANCIENT_DEBRIS, 1));
                 rewards.add(seal(1));
                 if (chance(50)) rewards.add(new ItemStack(Items.ANCIENT_DEBRIS, 1));
-                if (chance(35)) rewards.add(book("Mending"));
-                if (chance(30)) rewards.add(book("Unbreaking III"));
-                if (chance(25)) rewards.add(book("Efficiency V"));
-                if (chance(25)) rewards.add(book("Sharpness V"));
+                if (chance(35)) rewards.add(RewardBookFactory.create(server, RewardBook.MENDING));
+                if (chance(30)) rewards.add(RewardBookFactory.create(server, RewardBook.UNBREAKING_III));
+                if (chance(25)) rewards.add(RewardBookFactory.create(server, RewardBook.EFFICIENCY_V));
+                if (chance(25)) rewards.add(RewardBookFactory.create(server, RewardBook.SHARPNESS_V));
                 if (chance(20)) rewards.add(new ItemStack(Items.GOLDEN_APPLE, 1));
                 if (chance(25)) rewards.add(new ItemStack(Items.TOTEM_OF_UNDYING, 1));
             }
@@ -47,13 +48,13 @@ public final class RewardService {
                 rewards.add(new ItemStack(Items.GOLDEN_CARROT, roll(24, 32)));
                 rewards.add(new ItemStack(Items.ANCIENT_DEBRIS, 4));
                 rewards.add(seal(2));
-                rewards.add(book("Mending"));
+                rewards.add(RewardBookFactory.create(server, RewardBook.MENDING));
                 if (chance(50)) rewards.add(new ItemStack(Items.TOTEM_OF_UNDYING, 1));
-                if (chance(40)) rewards.add(book("Mending"));
-                if (chance(35)) rewards.add(book("Sharpness V"));
-                if (chance(35)) rewards.add(book("Protection IV"));
-                if (chance(30)) rewards.add(book("Efficiency V"));
-                if (chance(25)) rewards.add(book("Unbreaking III"));
+                if (chance(40)) rewards.add(RewardBookFactory.create(server, RewardBook.MENDING));
+                if (chance(35)) rewards.add(RewardBookFactory.create(server, RewardBook.SHARPNESS_V));
+                if (chance(35)) rewards.add(RewardBookFactory.create(server, RewardBook.PROTECTION_IV));
+                if (chance(30)) rewards.add(RewardBookFactory.create(server, RewardBook.EFFICIENCY_V));
+                if (chance(25)) rewards.add(RewardBookFactory.create(server, RewardBook.UNBREAKING_III));
                 if (chance(25)) rewards.add(new ItemStack(Items.GOLDEN_APPLE, 1));
             }
         }
@@ -81,12 +82,6 @@ public final class RewardService {
         nbt.putBoolean("colosseum_seal_item", true);
         seal.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
         return seal;
-    }
-
-    private ItemStack book(String name) {
-        ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
-        book.set(DataComponentTypes.CUSTOM_NAME, Text.literal("§b" + name));
-        return book;
     }
 
     private int roll(int min, int max) { return min + random.nextInt(max - min + 1); }

@@ -42,6 +42,7 @@ public final class SessionService {
         public final Map<UUID, Long> boundaryPushCooldownMs = new HashMap<>();
         public ServerBossBar waveBossBar;
         public int boundaryVisualTick = 0;
+        public int spiderAggroTick = 0;
 
         ActiveSession(ArenaData arena, Difficulty difficulty, Mode mode, Set<UUID> participants) {
             this.arena = arena;
@@ -139,6 +140,7 @@ public final class SessionService {
 
             updateWaveBossBar(s);
             showBoundaryVisual(world, s);
+            updateSpiderAggro(world, s);
         }
     }
 
@@ -176,6 +178,7 @@ public final class SessionService {
             if (s.waveBossBar != null) s.waveBossBar.setColor(BossBar.Color.RED);
             updateWaveBossBar(s);
             showBoundaryVisual(world, s);
+            updateSpiderAggro(world, s);
             return;
         }
 
@@ -269,6 +272,20 @@ public final class SessionService {
         return online.get(world.random.nextInt(online.size()));
     }
 
+    private void updateSpiderAggro(ServerWorld world, ActiveSession s) {
+        s.spiderAggroTick++;
+        if (s.spiderAggroTick % 10 != 0) return;
+
+        for (UUID id : s.currentWaveMobs) {
+            var ent = world.getEntity(id);
+            if (!(ent instanceof SpiderEntity spider) || !spider.isAlive()) continue;
+            if (spider.getTarget() == null || !spider.getTarget().isAlive()) {
+                ServerPlayerEntity target = pickAggroTarget(world, s);
+                if (target != null) spider.setTarget(target);
+            }
+        }
+    }
+
     private void applySunProtection(LivingEntity mob) {
         mob.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 20 * 60 * 30, 0, false, false));
         mob.setOnFire(false);
@@ -315,7 +332,7 @@ public final class SessionService {
         for (UUID id : s.participants) cooldownService.applyWinCooldown(id, s.difficulty);
         for (UUID id : s.eligible) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
-            if (p != null) rewardService.giveVictoryRewards(p, s.difficulty);
+            if (p != null) rewardService.giveVictoryRewards(p, s.difficulty, server);
         }
         restorePlayers(server, s, true, "Победа!");
     }
