@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public final class ArenaRepository {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -41,6 +42,10 @@ public final class ArenaRepository {
 
     public ArenaData get(String name) {
         return arenas.get(name.toLowerCase());
+    }
+
+    public Set<String> names() {
+        return arenas.keySet();
     }
 
     public void put(String name, ArenaData data) {

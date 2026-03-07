@@ -102,6 +102,11 @@ public final class ColosseumSiegeMod implements ModInitializer {
                                 .executes(this::joinAnyQueue)
                                 .then(CommandManager.argument("arena", StringArgumentType.word())
                                         .executes(this::joinQueue)))
+                        .then(CommandManager.literal("decline")
+                                .executes(this::declineAnyQueue)
+                                .then(CommandManager.argument("arena", StringArgumentType.word())
+                                        .executes(this::declineQueue)))
+                        .then(CommandManager.literal("arenas").executes(this::listArenas))
                         .then(CommandManager.literal("edit").requires(ModPermissions::hasAdmin)
                                 .then(CommandManager.argument("arena", StringArgumentType.word()).executes(this::adminEditArena)))
                         .then(CommandManager.literal("setcenter").requires(ModPermissions::hasAdmin).executes(this::setCenter))
@@ -170,6 +175,34 @@ public final class ColosseumSiegeMod implements ModInitializer {
                 sessionService.startFromLobby(ctx.getSource().getServer(), arena);
             }
         }
+        return 1;
+    }
+
+
+    private int declineAnyQueue(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity p = ctx.getSource().getPlayer();
+        if (p == null) return 0;
+        int removed = sessionService.declineAll(p.getUuid());
+        p.sendMessage(Text.literal(removed > 0 ? "§eВы вышли из " + removed + " набора(ов)." : "§cВы не состоите в наборах."), false);
+        return 1;
+    }
+
+    private int declineQueue(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity p = ctx.getSource().getPlayer();
+        if (p == null) return 0;
+        String arenaName = StringArgumentType.getString(ctx, "arena").toLowerCase();
+        boolean ok = sessionService.declineLobby(arenaName, p.getUuid());
+        p.sendMessage(Text.literal(ok ? "§eВы покинули набор: " + arenaName : "§cВы не были в наборе: " + arenaName), false);
+        return 1;
+    }
+
+    private int listArenas(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity p = ctx.getSource().getPlayer();
+        if (p == null) return 0;
+        List<String> names = new ArrayList<>(arenaRepo.names());
+        Collections.sort(names);
+        if (names.isEmpty()) return msg(p, "§cСохранённых арен нет.");
+        p.sendMessage(Text.literal("§eАрены: §f" + String.join(", ", names)), false);
         return 1;
     }
 

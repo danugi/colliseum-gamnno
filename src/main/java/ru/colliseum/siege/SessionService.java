@@ -79,6 +79,25 @@ public final class SessionService {
         return true;
     }
 
+    public boolean declineLobby(String arena, UUID playerId) {
+        QueueLobby q = lobbies.get(arena.toLowerCase());
+        if (q == null) return false;
+        boolean removed = q.players.remove(playerId);
+        if (q.players.isEmpty()) lobbies.remove(arena.toLowerCase());
+        return removed;
+    }
+
+    public int declineAll(UUID playerId) {
+        int removedFrom = 0;
+        List<String> toDelete = new ArrayList<>();
+        for (var e : lobbies.entrySet()) {
+            if (e.getValue().players.remove(playerId)) removedFrom++;
+            if (e.getValue().players.isEmpty()) toDelete.add(e.getKey());
+        }
+        toDelete.forEach(lobbies::remove);
+        return removedFrom;
+    }
+
     public ActiveSession startFromLobby(MinecraftServer server, ArenaData arena) {
         QueueLobby q = lobbies.remove(arena.name.toLowerCase());
         if (q == null) return null;
@@ -118,6 +137,11 @@ public final class SessionService {
                 if (!s.arena.isInside(world, new Vec3d(p.getX(), p.getY(), p.getZ()))) {
                     pushPlayerBackToArena(s, p);
                 }
+            }
+
+            if (isPartyWiped(server, world, s)) {
+                finishDefeat(server, s, "Вся группа повержена");
+                continue;
             }
 
             s.currentWaveMobs.removeIf(id -> {
@@ -198,6 +222,7 @@ public final class SessionService {
                 applyScaling(mob, players, s.difficulty);
                 applySunProtection(mob);
                 configureMobBehavior(mob, world, s);
+                applyDifficultyGear(mob, world, s.difficulty);
                 world.spawnEntity(mob);
                 s.currentWaveMobs.add(mob.getUuid());
                 spawned++;
@@ -215,6 +240,7 @@ public final class SessionService {
         boss.setCustomNameVisible(true);
         applyScaling(boss, s.participants.size() + 2, s.difficulty);
         boss.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.NETHERITE_AXE));
+        applyDifficultyGear(boss, world, s.difficulty);
         applySunProtection(boss);
         world.spawnEntity(boss);
         broadcast(world.getServer(), s.participants, "§cФинальный босс: " + s.difficulty.finalBossName());
@@ -286,6 +312,41 @@ public final class SessionService {
         }
     }
 
+    private boolean isPartyWiped(MinecraftServer server, ServerWorld world, ActiveSession s) {
+        int alive = 0;
+        for (UUID id : s.participants) {
+            ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
+            if (p == null) continue;
+            if (p.getEntityWorld() != world) continue;
+            if (p.isSpectator()) continue;
+            if (!p.isAlive()) continue;
+            alive++;
+        }
+        return alive == 0;
+    }
+
+    private void applyDifficultyGear(LivingEntity mob, ServerWorld world, Difficulty difficulty) {
+        if (difficulty == Difficulty.EASY || difficulty == Difficulty.MEDIUM) return;
+
+        int roll = world.random.nextInt(100);
+        if (mob instanceof ZombieEntity || mob instanceof HuskEntity) {
+            if (roll < (difficulty == Difficulty.HARDCORE ? 55 : 40)) {
+                mob.equipStack(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            }
+            if (roll < (difficulty == Difficulty.HARDCORE ? 45 : 30)) {
+                mob.equipStack(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            }
+            if (roll < (difficulty == Difficulty.HARDCORE ? 35 : 20)) {
+                mob.equipStack(EquipmentSlot.LEGS, new ItemStack(Items.IRON_LEGGINGS));
+            }
+        }
+
+        if (difficulty == Difficulty.HARDCORE && mob instanceof SkeletonEntity) {
+            if (roll < 30) mob.equipStack(EquipmentSlot.CHEST, new ItemStack(Items.CHAINMAIL_CHESTPLATE));
+            if (roll < 20) mob.equipStack(EquipmentSlot.HEAD, new ItemStack(Items.CHAINMAIL_HELMET));
+        }
+    }
+
     private void applySunProtection(LivingEntity mob) {
         mob.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 20 * 60 * 30, 0, false, false));
         mob.setOnFire(false);
@@ -321,20 +382,42 @@ public final class SessionService {
         if (s.finished) return;
         s.finished = true;
         clearWaveBossBar(s);
+        cleanupSessionEntities(server, s);
         for (UUID id : s.participants) cooldownService.applyLoseCooldown(id, s.difficulty);
         restorePlayers(server, s, false, reason);
+        sessions.remove(s.arena.name.toLowerCase());
     }
 
     public void finishVictory(MinecraftServer server, ActiveSession s) {
         if (s.finished) return;
         s.finished = true;
         clearWaveBossBar(s);
+        cleanupSessionEntities(server, s);
         for (UUID id : s.participants) cooldownService.applyWinCooldown(id, s.difficulty);
         for (UUID id : s.eligible) {
             ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
             if (p != null) rewardService.giveVictoryRewards(p, s.difficulty, server);
         }
         restorePlayers(server, s, true, "Победа!");
+        sessions.remove(s.arena.name.toLowerCase());
+    }
+
+
+    private void cleanupSessionEntities(MinecraftServer server, ActiveSession s) {
+        ServerWorld world = server.getWorld(s.arena.worldKey());
+        if (world == null) return;
+
+        for (UUID id : new HashSet<>(s.currentWaveMobs)) {
+            var ent = world.getEntity(id);
+            if (ent != null && ent.isAlive()) ent.discard();
+        }
+        s.currentWaveMobs.clear();
+
+        if (s.bossId != null) {
+            var boss = world.getEntity(s.bossId);
+            if (boss != null && boss.isAlive()) boss.discard();
+            s.bossId = null;
+        }
     }
 
     private void restorePlayers(MinecraftServer server, ActiveSession s, boolean win, String reason) {
